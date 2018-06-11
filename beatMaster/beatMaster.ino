@@ -10,21 +10,20 @@ IPAddress gateway(10, 0, 0, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 // send to:
-IPAddress remoteList[2]=
+const int nBeaters = 2;
+IPAddress remoteList[nBeaters] =
 {
-  IPAddress(10,0,0,101),
-  IPAddress(10,0,0,102)
+  IPAddress(10, 0, 0, 101),
+  IPAddress(10, 0, 0, 102)
 };
 
-//remoteList = new IPAdress(10,0,0,101);
-IPAddress remote(10, 0, 0, 101);
-IPAddress remote2(10, 0, 0, 102);
+
 
 // Time variables
-int tempo = 300;
+int tempo = 100;
 int beat = 0;
 int nBeats = 16;
-float swing = 0.3;
+float swing = 0.1;
 unsigned long lastBeat = 0;
 boolean delayBeat = false;
 
@@ -61,7 +60,7 @@ void loop() {
       if ((millis() - lastBeat) > tempo) {
 
         lastBeat = millis();
-        tempo = 300;
+        tempo = 100;
         if (delayBeat) {
           tempo = tempo + swing * tempo;
         }
@@ -81,15 +80,17 @@ void loop() {
         // blink the beat
         digitalWrite(LED_BUILTIN, (beat % 2));
 
-        UDP.beginPacket(remoteList[0], localPort);
-        UDP.write(message, sizeof(message));
-        int success = UDP.endPacket();
+        for (int i = 0; i < nBeaters; i++) {
+          UDP.beginPacket(remoteList[i], localPort);
+          UDP.write(message, sizeof(message));
+          int success = UDP.endPacket();
 
-        if (success != 1) {
-          Serial.print("uh oh, got: ");
-          Serial.println(success);
-          Serial.print("resetarting udp");
-          udpReset();
+          if (success != 1) {
+            Serial.print("uh oh, got: ");
+            Serial.println(success);
+            Serial.print("resetarting udp");
+            udpReset();
+          }
         }
       }
     }
