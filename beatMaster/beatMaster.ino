@@ -10,20 +10,24 @@ IPAddress gateway(10, 0, 0, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 // send to:
-const int nBeaters = 2;
+const int nBeaters = 4;
 IPAddress remoteList[nBeaters] =
 {
   IPAddress(10, 0, 0, 101),
-  IPAddress(10, 0, 0, 102)
+  IPAddress(10, 0, 0, 102),
+  IPAddress(10, 0, 0, 103),
+  IPAddress(10, 0, 0, 104)
 };
 
 
 
 // Time variables
-int tempo = 100;
+int tempo = 150;
+int tempoRef = 150;
 int beat = 0;
+int numLoops = 0;
 int nBeats = 16;
-float swing = 0.1;
+float swing = 0.3;
 unsigned long lastBeat = 0;
 boolean delayBeat = false;
 
@@ -60,7 +64,7 @@ void loop() {
       if ((millis() - lastBeat) > tempo) {
 
         lastBeat = millis();
-        tempo = 100;
+        tempo = tempoRef;
         if (delayBeat) {
           tempo = tempo + swing * tempo;
         }
@@ -77,8 +81,17 @@ void loop() {
         message[1] = beat++;
         beat %= nBeats;
 
+        if (beat == 0) { // count how many times...
+          numLoops++;
+          if (numLoops >= 8) {
+            tempoRef = 90 + random(140);
+            swing = random(500) / 1000;
+            numLoops = 0;
+            delay(10000);
+          }
+        }
         // blink the beat
-        digitalWrite(LED_BUILTIN, (beat % 2));
+        digitalWrite(16, (beat % 2));
 
         for (int i = 0; i < nBeaters; i++) {
           UDP.beginPacket(remoteList[i], localPort);
