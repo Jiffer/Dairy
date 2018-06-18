@@ -26,6 +26,7 @@ int tempo = 150;
 int tempoRef = 150;
 int beat = 0;
 int numLoops = 0;
+int songLength = 24;
 int nBeats = 16;
 float swing = 0.3;
 unsigned long lastBeat = 0;
@@ -60,9 +61,7 @@ void loop() {
   if (wifiConnected) {
     if (udpConnected) {
 
-      // TODO: make it use millis() instead of delay()
       if ((millis() - lastBeat) > tempo) {
-
         lastBeat = millis();
         tempo = tempoRef;
         if (delayBeat) {
@@ -83,7 +82,10 @@ void loop() {
 
         if (beat == 0) { // count how many times...
           numLoops++;
-          if (numLoops >= 8) {
+          if (numLoops >= songLength) {
+
+            // load a new tempo and pause
+            songLength = random(24, 80);
             tempoRef = 90 + random(140);
             swing = random(500) / 1000;
             numLoops = 0;
