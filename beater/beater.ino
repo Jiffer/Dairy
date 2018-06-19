@@ -5,7 +5,7 @@
 const char* ssid = "tick"; // ssid
 const char* password = "boomboom";// password
 boolean wifiConnected = false;
-IPAddress ip(10, 0, 0, 101);
+IPAddress ip(10, 0, 0, 102);
 IPAddress gateway(10, 0, 0, 1);
 IPAddress subnet(255, 255, 255, 0);
 
@@ -105,20 +105,8 @@ void setup()
 
 }
 void loop() {
-  //  if (beatCounter >= numLoops * 16) {
-  //    generateSequence();
-  //    numLoops = random(8, 24);
-  //    beatCounter = 0;
-  //  }
-  // for all motor driver pins
-  // check if onTime since lastHit has elapsed
-  for (int i = 0; i < nNotes; i++) {
-    // if so, turn the motor off
-    if (noteHigh[i] && (millis() - lastHit[i] > onTime)) {
-      noteHigh[i] = false;
-      analogWrite(pins[i], 0);
-    }
-  }
+  // check if I need to turn anyone off:
+  checkOnTime();
 
   // check if the WiFi and UDP connections were successful
   if (wifiConnected) {
@@ -182,7 +170,7 @@ void checkSensorAndPlay(int beatStep) {
   Serial.println(sensorValue);
 
   // closest value -
-  if (sensorValue > 700) {
+  if (sensorValue > 550) {
     for (int i = 0; i < nNotes; i++) {
       // play pattern 2
       Serial.print("pattern 2, setting analog pin: ");
@@ -195,7 +183,7 @@ void checkSensorAndPlay(int beatStep) {
       lastHit[i] = millis();
     }
   }
-  else if (sensorValue > 500) {
+  else if (sensorValue > 400) {
     for (int i = 0; i < nNotes; i++) {
       // play pattern 2
       Serial.print("pattern 1, setting analog pin: ");
@@ -208,7 +196,7 @@ void checkSensorAndPlay(int beatStep) {
       lastHit[i] = millis();
     }
   }
-  else if (sensorValue > 400) {
+  else if (sensorValue > 300) {
     for (int i = 0; i < nNotes; i++) {
       // play pattern 0
       Serial.print("pattern 0, setting analog pin: ");
@@ -318,9 +306,18 @@ void generateSequence() {
       }
     }
   }
+}
 
-
-
-
+///////////////////////////////////////
+void checkOnTime(){
+  // for all motor driver pins
+  // check if onTime since lastHit has elapsed
+  for (int i = 0; i < nNotes; i++) {
+    // if so, turn the motor off
+    if (noteHigh[i] && (millis() - lastHit[i] > onTime)) {
+      noteHigh[i] = false;
+      analogWrite(pins[i], 0);
+    }
+  }
 }
 

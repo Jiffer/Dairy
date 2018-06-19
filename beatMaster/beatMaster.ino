@@ -25,12 +25,55 @@ IPAddress remoteList[nBeaters] =
 int tempo = 150;
 int tempoRef = 150;
 int beat = 0;
-int numLoops = 0;
-int songLength = 24;
-int nBeats = 16;
-float swing = 0.3;
+
+int songLength = 12;
+const int nBeats = 16;
+float swing = 0.0;
 unsigned long lastBeat = 0;
 boolean delayBeat = false;
+
+// drum machine Variables
+const int pins[] = {16, 5, 4, 0}; // labeled D0, D1, D2, D3, D4 on nodeMCU PCB
+const int nNotes = 4;
+
+// how long to pulse in ms
+unsigned int onTime = 5;
+// keep track of the last time a motor channel (note) was triggered
+unsigned long lastHit[nNotes];
+// keep track if a note is currently on (high) or if it has been released
+bool noteHigh[nNotes];
+int pattern[3][nNotes][nBeats] = {{
+    {1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0, 0, 0},
+    {0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0, 0},
+    {0, 0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0},
+    {0, 0, 0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800}
+  },
+  {
+    {1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0, 0, 0},
+    {0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0, 0},
+    {0, 0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0},
+    {0, 0, 0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800}
+  },
+  {
+    {1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0, 0, 0},
+    {0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0, 0},
+    {0, 0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800, 0},
+    {0, 0, 0, 1000, 0, 0, 0, 1000, 0, 0, 0, 800, 0, 0, 0, 800}
+  }
+};
+int notesOn[nBeats] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+int liklihood[4][16] = {
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {5, 25, 25, 25, 5, 25, 25, 25, 5, 25, 25, 25, 5, 25, 25, 25},
+  {50, 10, 15, 10, 15, 10, 15, 10, 40, 10, 15, 10, 20, 15, 15, 15},
+  {5, 15, 10, 15, 50, 15, 15, 15, 10, 15, 10, 15, 40, 15, 15, 15},
+};
+
+int songLoopCounter = 0;
+int loopCounter = 0;
+int lastBeatCount = 0;
+int numLoops = 10;
 
 // UDP variables
 unsigned int localPort = 5280;
@@ -54,9 +97,13 @@ void setup() {
       pinMode(LED_BUILTIN, OUTPUT);
     }
   }
+  generateSequence();
 }
 
 void loop() {
+
+  checkOnTime();
+
   // check if the WiFi and UDP connections were successful
   if (wifiConnected) {
     if (udpConnected) {
@@ -81,19 +128,20 @@ void loop() {
         beat %= nBeats;
 
         if (beat == 0) { // count how many times...
-          numLoops++;
-          if (numLoops >= songLength) {
+          songLoopCounter++;
+          Serial.print(loopCounter);
+          if (songLoopCounter >= songLength) {
 
             // load a new tempo and pause
-            songLength = random(24, 80);
-            tempoRef = 90 + random(140);
-            swing = random(500) / 1000;
-            numLoops = 0;
-            delay(10000);
+            songLength = random(36, 60);
+            tempoRef = 90 + random(100);
+            swing = random(350) / 1000;
+            songLoopCounter = 0;
+            delay(5000);
           }
         }
-        // blink the beat
-        digitalWrite(16, (beat % 2));
+        //        // blink the beat
+        //        digitalWrite(16, (beat % 2));
 
         for (int i = 0; i < nBeaters; i++) {
           UDP.beginPacket(remoteList[i], localPort);
@@ -107,6 +155,23 @@ void loop() {
             udpReset();
           }
         }
+        // also play my motors:
+        if (lastBeatCount > beat) {
+          // beginning of a new loop
+          // check if its time to generate new patterns
+          if (loopCounter > numLoops) {
+            //              Serial.println(loopCounter);
+            generateSequence();
+            loopCounter = 0;
+          }
+          loopCounter++;
+
+        }
+        lastBeatCount = beat;
+
+        // is someone there?
+        checkSensorAndPlay(beat);
+
       }
     }
   }
@@ -179,3 +244,112 @@ void udpReset() {
   }
 }
 
+//////////////////////////////////////////
+void checkSensorAndPlay(int beatStep) {
+
+  // read the sensor
+  int sensorValue = analogRead(A0);
+  //  Serial.print(" sensor: ");
+  //  Serial.println(sensorValue);
+
+  // closest value -
+  if (sensorValue > 550) {
+    for (int i = 0; i < nNotes; i++) {
+      // play pattern 2
+      Serial.print("pattern 2, setting analog pin: ");
+      Serial.print(pins[i]);
+      Serial.print(" to value: ");
+      Serial.println(pattern[0][i][beatStep]);
+      analogWrite(pins[i], pattern[2][i][beatStep]);
+      // keep track of which note is high and reset the time since the lastHit to now
+      noteHigh[i] = true;
+      lastHit[i] = millis();
+    }
+  }
+  else if (sensorValue > 400) {
+    for (int i = 0; i < nNotes; i++) {
+      // play pattern 2
+      Serial.print("pattern 1, setting analog pin: ");
+      Serial.print(pins[i]);
+      Serial.print(" to value: ");
+      Serial.println(pattern[0][i][beatStep]);
+      analogWrite(pins[i], pattern[1][i][beatStep]);
+      // keep track of which note is high and reset the time since the lastHit to now
+      noteHigh[i] = true;
+      lastHit[i] = millis();
+    }
+  }
+  else if (sensorValue > 300) {
+    for (int i = 0; i < nNotes; i++) {
+      // play pattern 0
+      Serial.print("pattern 0, setting analog pin: ");
+      Serial.print(pins[i]);
+      Serial.print(" to value: ");
+      Serial.println(pattern[0][i][beatStep]);
+      analogWrite(pins[i], pattern[0][i][beatStep]);
+      // keep track of which note is high and reset the time since the lastHit to now
+      noteHigh[i] = true;
+      lastHit[i] = millis();
+    }
+  }
+  else {
+    // play nothing
+  }
+
+}
+
+//////////////////////////////////////////
+void generateSequence() {
+  Serial.println("new sequence a comin");
+  //    pattern[3][4][16]
+  //  liklihood[4][16]
+
+  for (int i = 0; i < nBeats; i++) {
+    notesOn[i] = 0;
+    for (int j = 0; j < nNotes; j++) {
+      pattern[0][j][i] = 0;
+      pattern[1][j][i] = 0;
+      pattern[2][j][i] = 0;
+
+      if (liklihood[j][i] > random(100) && notesOn[i] < 3) {
+        notesOn[i]++;
+        pattern[0][j][i] = 1023;
+      }
+    }
+  }
+  for (int i = 0; i < nBeats; i++) {
+    for (int j = 0; j < nNotes; j++) {
+      pattern[1][j][i] = pattern[0][j][i];
+      if (pattern[1][j][i] == 0) {
+        if (liklihood[j][i] > random(100) && notesOn[i] < 3) {
+          notesOn[i]++;
+          pattern[1][j][i] = 1023;
+        }
+      }
+    }
+  }
+  for (int i = 0; i < nBeats; i++) {
+    for (int j = 0; j < nNotes; j++) {
+      pattern[2][j][i] = pattern[1][j][i];
+      if (pattern[1][j][i] == 0) {
+        if (25 > random(100) && notesOn[i] < 3) {
+          notesOn[i]++;
+          pattern[2][j][i] = 1023;
+        }
+      }
+    }
+  }
+}
+
+///////////////////////////////////////
+void checkOnTime() {
+  // for all motor driver pins
+  // check if onTime since lastHit has elapsed
+  for (int i = 0; i < nNotes; i++) {
+    // if so, turn the motor off
+    if (noteHigh[i] && (millis() - lastHit[i] > onTime)) {
+      noteHigh[i] = false;
+      analogWrite(pins[i], 0);
+    }
+  }
+}
